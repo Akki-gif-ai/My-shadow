@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Shadows: LDR</title>
+    <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
+    <style>
+        body { margin: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
+        /* This creates the collage background using your images */
+        .bg {
+            position: fixed; width: 100%; height: 100%;
+            background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)), url('assets/collage.jpg');
+            background-size: cover; z-index: -1;
+        }
+        .screen { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; text-align: center; }
+        .glass { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); padding: 40px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.2); width: 300px; }
+        input, select { width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; border: none; }
+        button { background: white; color: black; border: none; padding: 15px 30px; border-radius: 30px; cursor: pointer; font-weight: bold; margin-top: 20px; width: 100%; }
+        #game-ui { display: none; }
+        .level { color: #ff2d55; letter-spacing: 5px; font-size: 12px; margin-bottom: 10px; }
+        .task { font-style: italic; font-size: 20px; min-height: 80px; }
+    </style>
+</head>
+<body>
+    <div class="bg"></div>
+    <div class="screen">
+        <div id="setup-ui" class="glass">
+            <h1 style="font-style: italic;">Shadows</h1>
+            <input type="text" id="user-name" placeholder="Your Name">
+            <select id="gender">
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+            </select>
+            <input type="text" id="room-id" placeholder="Room ID (e.g. 'our-secret')">
+            <button onclick="start()">CONNECT</button>
+        </div>
+
+        <div id="game-ui" class="glass">
+            <div class="level">LEVEL <span id="lvl-num">1</span></div>
+            <div class="task" id="task-text">Waiting for first task...</div>
+            <button onclick="nextTask()">SEND NEXT TASK</button>
+            <button onclick="punish()" style="background: transparent; color: #ff2d55; border: 1px solid #ff2d55; margin-top: 10px;">PUNISH</button>
+        </div>
+    </div>
+
+    <script>
+        let ably, channel;
+        const tasks = [
+            "Whisper a secret desire in a voice note.",
+            "Describe exactly what you'd do if I were there.",
+            "Follow my next command without question...",
+            "A task of pure surrender. [Player Choice]",
+            "The Kinky Peak. No holding back.",
+            "Final Level: Absolute Connection."
+        ];
+        let currentLvl = 0;
+
+        async function start() {
+            const room = document.getElementById('room-id').value;
+            if(!room) return alert("Enter a Room ID");
+
+            // This connects to Netlify for the key
+            ably = new Ably.Realtime({ authUrl: '/api/auth' });
+            channel = ably.channels.get(room);
+
+            channel.subscribe('play', (msg) => {
+                document.getElementById('lvl-num').innerText = msg.data.level;
+                document.getElementById('task-text').innerText = msg.data.text;
+                if (window.navigator.vibrate) window.navigator.vibrate(200);
+            });
+
+            document.getElementById('setup-ui').style.display = 'none';
+            document.getElementById('game-ui').style.display = 'block';
+        }
+
+        function nextTask() {
+            currentLvl = Math.min(currentLvl + 1, 6);
+            channel.publish('play', { level: currentLvl, text: tasks[currentLvl-1] });
+        }
+        
+        function punish() {
+            channel.publish('play', { level: '!', text: "PUNISHMENT: You've been bad. Wait for instructions." });
+        }
+    </script>
+</body>
+</html>
