@@ -1,85 +1,249 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Shadows: LDR</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SHADOWS | LDR</title>
     <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital@1&family=Montserrat:wght@300;600&display=swap" rel="stylesheet">
     <style>
-        body { margin: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
-        /* This creates the collage background using your images */
-        .bg {
-            position: fixed; width: 100%; height: 100%;
-            background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)), url('assets/collage.jpg');
-            background-size: cover; z-index: -1;
-        }
-        .screen { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; text-align: center; }
-        .glass { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); padding: 40px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.2); width: 300px; }
-        input, select { width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; border: none; }
-        button { background: white; color: black; border: none; padding: 15px 30px; border-radius: 30px; cursor: pointer; font-weight: bold; margin-top: 20px; width: 100%; }
+        :root { --glow: #ff0000; --bg-dark: #000000; --glass: rgba(255, 255, 255, 0.05); }
+        body, html { margin: 0; padding: 0; height: 100%; background: var(--bg-dark); font-family: 'Montserrat', sans-serif; color: white; overflow-x: hidden; }
+        .bg-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(rgba(0,0,0,0.8), rgba(0,0,0,0.8)), url('assets/collage.jpg'); background-size: cover; z-index: -1; filter: grayscale(100%); animation: slowPulse 20s infinite ease-in-out; }
+        @keyframes slowPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+        .container { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .glass-card { background: var(--glass); backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.1); padding: 2rem; border-radius: 20px; width: 90%; max-width: 450px; box-shadow: 0 10px 50px rgba(0,0,0,0.8); text-align: center; }
+        h1 { font-family: 'Playfair Display', serif; font-style: italic; font-size: 2.2rem; letter-spacing: 5px; margin-bottom: 20px; }
+        input, select { background: rgba(0,0,0,0.6); border: 1px solid #333; color: white; padding: 12px; width: 100%; border-radius: 5px; margin-bottom: 15px; box-sizing: border-box; }
+        .btn { background: none; border: 1px solid white; color: white; padding: 14px; width: 100%; border-radius: 5px; cursor: pointer; text-transform: uppercase; letter-spacing: 2px; transition: 0.4s; font-weight: 600; margin-top: 10px; }
+        .btn:hover { background: white; color: black; box-shadow: 0 0 15px white; }
+        .btn-punish { border-color: var(--glow); color: var(--glow); margin-top: 20px; }
+        .btn-safe { background: #333; border: none; font-size: 0.7rem; margin-top: 30px; opacity: 0.5; color: white; cursor: pointer; }
         #game-ui { display: none; }
-        .level { color: #ff2d55; letter-spacing: 5px; font-size: 12px; margin-bottom: 10px; }
-        .task { font-style: italic; font-size: 20px; min-height: 80px; }
+        .lvl-indicator { color: var(--glow); font-size: 0.8rem; letter-spacing: 4px; font-weight: bold; }
+        .timer { font-size: 2.5rem; margin: 15px 0; font-weight: 300; }
+        .task-box { font-family: 'Playfair Display', serif; font-size: 1.2rem; line-height: 1.5; min-height: 100px; padding: 20px 0; border-top: 1px solid rgba(255,255,255,0.1); }
     </style>
 </head>
 <body>
-    <div class="bg"></div>
-    <div class="screen">
-        <div id="setup-ui" class="glass">
-            <h1 style="font-style: italic;">Shadows</h1>
-            <input type="text" id="user-name" placeholder="Your Name">
-            <select id="gender">
-                <option value="male">Male</option>
-                <option value="female">Female</option>
-            </select>
-            <input type="text" id="room-id" placeholder="Room ID (e.g. 'our-secret')">
-            <button onclick="start()">CONNECT</button>
-        </div>
 
-        <div id="game-ui" class="glass">
-            <div class="level">LEVEL <span id="lvl-num">1</span></div>
-            <div class="task" id="task-text">Waiting for first task...</div>
-            <button onclick="nextTask()">SEND NEXT TASK</button>
-            <button onclick="punish()" style="background: transparent; color: #ff2d55; border: 1px solid #ff2d55; margin-top: 10px;">PUNISH</button>
-        </div>
+<div class="bg-overlay"></div>
+<div class="container">
+    <div id="setup-ui" class="glass-card">
+        <h1>SHADOWS</h1>
+        <input type="text" id="user-name" placeholder="YOUR NAME">
+        <select id="gender">
+            <option value="male">MALE / DOMINANT</option>
+            <option value="female">FEMALE / SUBMISSIVE</option>
+        </select>
+        <input type="text" id="room-id" placeholder="SECRET ROOM ID">
+        <button class="btn" onclick="initGame()">CONNECT</button>
     </div>
 
-    <script>
-        let ably, channel;
-        const tasks = [
-            "Whisper a secret desire in a voice note.",
-            "Describe exactly what you'd do if I were there.",
-            "Follow my next command without question...",
-            "A task of pure surrender. [Player Choice]",
-            "The Kinky Peak. No holding back.",
-            "Final Level: Absolute Connection."
-        ];
-        let currentLvl = 0;
+    <div id="game-ui" class="glass-card">
+        <div class="lvl-indicator">LEVEL <span id="lvl-num">1.1</span></div>
+        <div id="timer-display" class="timer">00:00</div>
+        <div id="task-text" class="task-box">Waiting for partner...</div>
+        <button class="btn" onclick="nextSubTask()">SEND NEXT STEP</button>
+        <button class="btn btn-punish" onclick="triggerPunishment()">PUNISHMENT</button>
+        <button class="btn btn-safe" onclick="safeWord()">SAFE WORD</button>
+    </div>
+</div>
 
-        async function start() {
-            const room = document.getElementById('room-id').value;
-            if(!room) return alert("Enter a Room ID");
+<script>
+    let ably, channel, timerInterval;
+    let currentLvl = 0; 
+    let subTaskIndex = 0; 
 
-            // This connects to Netlify for the key
-            ably = new Ably.Realtime({ authUrl: '/api/auth' });
-            channel = ably.channels.get(room);
+    const genderTasks = {
+        male: [
+            // Level 1
+            [
+                { t: "Strip completely. Stand in front of the camera and let her examine your body.", time: 60 },
+                { t: "Turn around slowly. Show her every angle. Describe being exposed.", time: 60 },
+                { t: "Get close to the mic. Whisper your darkest fetish involving her.", time: 60 },
+                { t: "Find an object (belt/brush). Show her how you'll use it on yourself.", time: 90 },
+                { t: "Kneel before the camera. Promise to serve her pleasure tonight.", time: 60 },
+                { t: "Describe exactly how you want her hands on you right now.", time: 90 },
+                { t: "Send a close-up photo of your current reaction to her on screen.", time: 60 }
+            ],
+            // Level 2
+            [
+                { t: "Start stroking yourself with your non-dominant hand. Maintain eye contact.", time: 120 },
+                { t: "Stop. Use a belt or hand to deliver 5 sharp strikes to your thigh. Let her hear it.", time: 60 },
+                { t: "Resume stroking with only two fingers. Tease the tip until you're shaking.", time: 120 },
+                { t: "Hands behind your head. Describe the ache in your stomach in detail.", time: 90 },
+                { t: "Edge yourself. Go to the absolute limit. Do not finish.", time: 180 },
+                { t: "Stop. Hold your breath for 20s while staring at her. Release and moan.", time: 60 },
+                { t: "Apply ice or cold water to yourself. Describe the shock.", time: 90 }
+            ],
+            // Level 3
+            [
+                { t: "Assume a submissive position (all fours) while she watches.", time: 120 },
+                { t: "Follow her next 'Extreme Command' via text immediately.", time: 240 },
+                { t: "Spank yourself hard enough to leave marks. Show her the color.", time: 90 },
+                { t: "Tell her 3 things you'd let her do that you've never told anyone.", time: 120 },
+                { t: "Beg for the privilege of touching yourself again.", time: 60 },
+                { t: "Perform a 'ruined start'—get close, then stop and squeeze tight.", time: 90 },
+                { t: "Describe your favorite pain-pleasure fantasy involving her.", time: 120 }
+            ],
+            // Level 4
+            [
+                { t: "Blindfold yourself. You are now her toy. Move only when she speaks.", time: 60 },
+                { t: "Touch yourself exactly where she describes in her next voice note.", time: 180 },
+                { t: "Place your own hand over your mouth and nose for 15s.", time: 60 },
+                { t: "Describe the fantasy of being restrained and used while blind.", time: 120 },
+                { t: "Slowly tease yourself blindfolded. Focus on the internal pulsing.", time: 180 },
+                { t: "Remove the blindfold. Tell her you are her property.", time: 60 },
+                { t: "Lick the camera lens as if it were her. Make it slow.", time: 60 }
+            ],
+            // Level 5
+            [
+                { t: "Describe a scenario where you watch her with someone else. Be graphic.", time: 180 },
+                { t: "Edge yourself while watching her reactions. Do not look away.", time: 180 },
+                { t: "Incorporate your specific fetish now for 2 minutes.", time: 120 },
+                { t: "Hands up. Suffer through the need. Tell her how much it hurts.", time: 90 },
+                { t: "Use a household object as a 'toy' on yourself. Describe it.", time: 120 },
+                { t: "Last Edge: Go so far that you lose your breath. Hold it.", time: 180 },
+                { t: "Tell her you'll do anything if she lets you finish.", time: 60 }
+            ],
+            // Level 6
+            [
+                { t: "The final descent. No more talking. Only action.", time: 30 },
+                { t: "Push yourself to the absolute limit. Stay there.", time: 120 },
+                { t: "Tell her 'I'm coming for you' right into the mic.", time: 45 },
+                { t: "CLIMAX. Now. Let the camera see everything.", time: 120 },
+                { t: "Keep the mic live. Let her hear every sound of your release.", time: 90 },
+                { t: "Clean yourself up on camera while she watches.", time: 120 },
+                { t: "Aftercare: Whisper how much you belong to her.", time: 120 }
+            ]
+        ],
+        female: [
+            // Level 1
+            [
+                { t: "Strip completely. Stand before the camera. Let him possess you.", time: 60 },
+                { t: "Touch your own breasts. Describe wanting his mouth there.", time: 90 },
+                { t: "Turn around. Arch your back. Show him what he’s missing.", time: 60 },
+                { t: "Describe your most shameful fantasy involving him.", time: 120 },
+                { t: "Spread your legs while standing. Describe the heat building.", time: 90 },
+                { t: "Send a photo of your bare skin, focused on your entrance.", time: 60 },
+                { t: "Tell him what his first command should be when you meet.", time: 90 }
+            ],
+            // Level 2
+            [
+                { t: "Lay back and spread wide for the camera. Don't touch yet.", time: 120 },
+                { t: "Use your spit to get wet. Make sure he hears every sound.", time: 90 },
+                { t: "Describe the feeling of being empty and needing him.", time: 120 },
+                { t: "Slide two fingers inside slowly. Keep eye contact.", time: 120 },
+                { t: "Stop. Hands above head. Arch your back and moan his name.", time: 60 },
+                { t: "Use fingers faster. Describe the moment your pulse starts.", time: 120 },
+                { t: "Tell him you are his property 5 times.", time: 60 }
+            ],
+            // Level 3
+            [
+                { t: "Spank your bum on camera hard. Show him the red marks.", time: 90 },
+                { t: "Follow his next 'Dirty Command' immediately.", time: 240 },
+                { t: "Voice note: moan while you pull your own hair.", time: 90 },
+                { t: "Edge yourself using only your mind and light touch. Stop on command.", time: 180 },
+                { t: "Beg for his permission to touch your climax spot.", time: 60 },
+                { t: "Describe the fantasy of being bound and used by him.", time: 120 },
+                { t: "Send a wetness proof photo (artistic close-up).", time: 60 }
+            ],
+            // Level 4
+            [
+                { t: "Blindfold yourself. You belong to his voice now.", time: 60 },
+                { t: "Touch yourself exactly how he describes in the audio.", time: 180 },
+                { t: "Place your hand over your mouth and nose. Feel the heat.", time: 60 },
+                { t: "Describe the sensation of him being inside you while blind.", time: 120 },
+                { t: "Slowly tease yourself blindfolded. Whimper for him.", time: 180 },
+                { t: "Remove the blindfold. Tell him he is your Master.", time: 60 },
+                { t: "Lick your fingers and show him, describing the taste.", time: 60 }
+            ],
+            // Level 5
+            [
+                { t: "Edge yourself to the absolute brink. Then stop.", time: 180 },
+                { t: "Wait. Describe how desperately you need to finish.", time: 90 },
+                { t: "Edge again harder. Get so close that you shake.", time: 120 },
+                { t: "Hands up. Arch your back. Let him see your body reacting.", time: 90 },
+                { t: "Incorporate a fetish object (ice/silk) for 2 minutes.", time: 120 },
+                { t: "Final Edge: If you climax now, you must perform a Punishment.", time: 180 },
+                { t: "Send a voice note of your raw, wordless moans.", time: 60 }
+            ],
+            // Level 6
+            [
+                { t: "Total surrender. This is the end of your control.", time: 30 },
+                { t: "Focus only on his voice or name. No stopping.", time: 120 },
+                { t: "Say 'I'm coming for you' into the mic.", time: 45 },
+                { t: "CLIMAX. Now. Let him see every contraction.", time: 120 },
+                { t: "Keep the mic and camera live. Don't hide.", time: 90 },
+                { t: "Describe the feeling of the release while shaking.", time: 120 },
+                { t: "Aftercare: Whisper how much you love being his.", time: 120 }
+            ]
+        ]
+    };
 
-            channel.subscribe('play', (msg) => {
-                document.getElementById('lvl-num').innerText = msg.data.level;
-                document.getElementById('task-text').innerText = msg.data.text;
-                if (window.navigator.vibrate) window.navigator.vibrate(200);
+    const punishments = {
+        male: ["PHOTO: Send a bum pic.", "ICE: Pour cold water on your lap.", "IMPACT: Spank your bum 20 times hard.", "MARK: Write 'HER TOY' on your chest.", "LOCK: Hands behind back for 5 mins.", "REVEAL: Photo of your exposure."],
+        female: ["PHOTO: Send a bum pic.", "ICE: Trace ice on your nipples for 60s.", "IMPACT: Spank your bum 20 times loudly.", "MARK: Write HIS NAME on your thigh.", "LOCK: Blindfolded and still for 5 mins.", "PHOTO: Artistic wetness close-up."]
+    };
+
+    async function initGame() {
+        const room = document.getElementById('room-id').value;
+        if(!room) return alert("Enter Room ID");
+        ably = new Ably.Realtime({ authUrl: '/api/auth' });
+        channel = ably.channels.get(room);
+        channel.subscribe('play', (msg) => handleEvent(msg.data));
+        document.getElementById('setup-ui').style.display = 'none';
+        document.getElementById('game-ui').style.display = 'block';
+    }
+
+    function handleEvent(data) {
+        if(data.type === 'STOP') {
+            document.body.innerHTML = "<h1 style='color:white; text-align:center; margin-top:40vh;'>SESSION ENDED.</h1>";
+            return;
+        }
+        document.getElementById('task-text').innerText = data.text;
+        document.getElementById('lvl-num').innerText = data.level;
+        startTimer(data.timer);
+        if(navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    }
+
+    function startTimer(seconds) {
+        clearInterval(timerInterval);
+        let timeLeft = seconds;
+        timerInterval = setInterval(() => {
+            let m = Math.floor(timeLeft / 60); let s = timeLeft % 60;
+            document.getElementById('timer-display').innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
+            if(timeLeft <= 0) { clearInterval(timerInterval); document.getElementById('timer-display').innerText = "TIME UP"; }
+            timeLeft--;
+        }, 1000);
+    }
+
+    function nextSubTask() {
+        const gender = document.getElementById('gender').value;
+        const levelData = genderTasks[gender][currentLvl];
+        if(subTaskIndex < 7) {
+            channel.publish('play', {
+                level: (currentLvl + 1) + "." + (subTaskIndex + 1),
+                text: levelData[subTaskIndex].t,
+                timer: levelData[subTaskIndex].time
             });
+            subTaskIndex++;
+        } else {
+            currentLvl++; subTaskIndex = 0;
+            if(currentLvl > 5) alert("End of Game.");
+            else alert("Level Complete. Start Level " + (currentLvl + 1));
+        }
+    }
 
-            document.getElementById('setup-ui').style.display = 'none';
-            document.getElementById('game-ui').style.display = 'block';
-        }
+    function triggerPunishment() {
+        const myGender = document.getElementById('gender').value;
+        const target = (myGender === 'male') ? 'female' : 'male';
+        const p = punishments[target][Math.floor(Math.random() * 6)];
+        channel.publish('play', { level: "PUNISH", text: "🚨 " + p, timer: 120 });
+    }
 
-        function nextTask() {
-            currentLvl = Math.min(currentLvl + 1, 6);
-            channel.publish('play', { level: currentLvl, text: tasks[currentLvl-1] });
-        }
-        
-        function punish() {
-            channel.publish('play', { level: '!', text: "PUNISHMENT: You've been bad. Wait for instructions." });
-        }
-    </script>
+    function safeWord() { channel.publish('play', { type: 'STOP' }); }
+</script>
 </body>
 </html>
